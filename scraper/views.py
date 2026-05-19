@@ -9,30 +9,31 @@ from .services import run as run_scraper
 
 logger = logging.getLogger(__name__)
 
-# Временное хранилище статусов (в памяти)
-tasks = {}
+from django.core.cache import cache
 
+def update_task(task_id, updates):
+    task = cache.get(task_id, {})
+    task.update(updates)
+    cache.set(task_id, task, timeout=86400)
 def index_view(request):
     return render(request, 'scraper/index.html')
 
 def background_task(task_id, api_key, regions, keywords):
     logger.info(f"Начало фоновой задачи {task_id}. Регионы: {regions}")
-    tasks[task_id]['status'] = 'running'
+    update_task(task_id, {'status': 'running'})
     output_filename = f"report_{task_id}.xlsx"
     output_path = os.path.join("scraper_reports", output_filename)
     os.makedirs("scraper_reports", exist_ok=True)
     
     def status_callback(msg):
-        tasks[task_id]['message'] = msg
+        update_task(task_id, {'message': msg})
 
     try:
         run_scraper(api_key, regions, keywords, output_file=output_path, status_callback=status_callback)
-        tasks[task_id]['status'] = 'completed'
-        tasks[task_id]['file_path'] = output_path
+        update_task(task_id, {'status': 'completed', 'file_path': output_path})
         logger.info(f"Задача {task_id} успешно завершена. Файл: {output_path}")
     except Exception as e:
-        tasks[task_id]['status'] = 'error'
-        tasks[task_id]['message'] = str(e)
+        update_task(task_id, {'status': 'error', 'message': str(e)})
         logger.error(f"Ошибка в задаче {task_id}: {e}", exc_info=True)
 
 @csrf_exempt
@@ -50,7 +51,7 @@ def start_scraping_view(request):
 
         task_id = str(uuid.uuid4())
         logger.info(f"Создана новая задача {task_id} от пользователя")
-        tasks[task_id] = {'status': 'pending', 'message': 'Инициализация парсера...'}
+        cache.set(task_id, {'status': 'pending', 'message': 'Инициализация парсера...'}, timeout=86400)
         
         thread = threading.Thread(target=background_task, args=(task_id, api_key, regions, keywords))
         thread.start()
@@ -59,13 +60,13 @@ def start_scraping_view(request):
     return JsonResponse({'error': 'Invalid method'}, status=400)
 
 def check_status_view(request, task_id):
-    task = tasks.get(task_id)
+    task = cache.get(task_id)
     if task:
         return JsonResponse(task)
     return JsonResponse({'error': 'Task not found'}, status=404)
 
 def download_report_view(request, task_id):
-    task = tasks.get(task_id)
+    task = cache.get(task_id)
     if task and task['status'] == 'completed':
         file_path = task['file_path']
         if os.path.exists(file_path):
