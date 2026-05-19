@@ -22,8 +22,6 @@ RUN python manage.py collectstatic --noinput
 # Создание директории для отчетов
 RUN mkdir -p scraper_reports
 
-# Открытие порта
-EXPOSE 8000
 
 # Запуск gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "120", "web_scraper.wsgi:application"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8012", "--workers", "3", "--timeout", "120", "web_scraper.wsgi:application"]

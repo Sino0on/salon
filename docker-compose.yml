@@ -4,7 +4,7 @@ services:
   web:
     build: .
     ports:
-      - "8000:8000"
+      - "8012:8012"
     volumes:
       # Монтируем директорию для отчетов, чтобы файлы сохранялись на хосте
       - ./scraper_reports:/app/scraper_reports
