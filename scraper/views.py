@@ -4,7 +4,10 @@ import os
 from django.shortcuts import render
 from django.http import JsonResponse, FileResponse
 from django.views.decorators.csrf import csrf_exempt
+import logging
 from .services import run as run_scraper
+
+logger = logging.getLogger(__name__)
 
 # Временное хранилище статусов (в памяти)
 tasks = {}
@@ -13,6 +16,7 @@ def index_view(request):
     return render(request, 'scraper/index.html')
 
 def background_task(task_id, api_key, regions, keywords):
+    logger.info(f"Начало фоновой задачи {task_id}. Регионы: {regions}")
     tasks[task_id]['status'] = 'running'
     output_filename = f"report_{task_id}.xlsx"
     output_path = os.path.join("scraper_reports", output_filename)
@@ -25,9 +29,11 @@ def background_task(task_id, api_key, regions, keywords):
         run_scraper(api_key, regions, keywords, output_file=output_path, status_callback=status_callback)
         tasks[task_id]['status'] = 'completed'
         tasks[task_id]['file_path'] = output_path
+        logger.info(f"Задача {task_id} успешно завершена. Файл: {output_path}")
     except Exception as e:
         tasks[task_id]['status'] = 'error'
         tasks[task_id]['message'] = str(e)
+        logger.error(f"Ошибка в задаче {task_id}: {e}", exc_info=True)
 
 @csrf_exempt
 def start_scraping_view(request):
@@ -43,6 +49,7 @@ def start_scraping_view(request):
              return JsonResponse({'error': 'Все поля должны быть заполнены'}, status=400)
 
         task_id = str(uuid.uuid4())
+        logger.info(f"Создана новая задача {task_id} от пользователя")
         tasks[task_id] = {'status': 'pending', 'message': 'Инициализация парсера...'}
         
         thread = threading.Thread(target=background_task, args=(task_id, api_key, regions, keywords))

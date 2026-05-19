@@ -81,11 +81,18 @@ def search_places(query: str, api_key: str) -> list[dict]:
         params = {"query": query, "key": api_key, "language": "ru"}
         if token:
             params["pagetoken"] = token
+            print("   [Google API] Ждем 2 секунды перед следующей страницей поиска...")
             time.sleep(2)          # Google требует паузу перед следующей страницей
+        
+        print(f"   [Google API] Выполняем поиск: {query}")
         r = requests.get(BASE_SEARCH, params=params, timeout=15)
         data = r.json()
         if data.get("status") not in ("OK", "ZERO_RESULTS"):
-            print(f"  ⚠  Search error: {data.get('status')} — {data.get('error_message','')}")
+            error_msg = data.get('error_message', '')
+            status_code = data.get('status')
+            print(f"  [Ошибка]  Search error: {status_code} - {error_msg}")
+            if status_code == "REQUEST_DENIED":
+                raise ValueError(f"Ошибка API ключа (REQUEST_DENIED): {error_msg}")
             break
         results.extend(data.get("results", []))
         token = data.get("next_page_token")
@@ -106,6 +113,7 @@ def get_place_details(place_id: str, api_key: str) -> dict:
         "language": "ru",
         "key": api_key,
     }
+    print(f"   [Google API] Запрос деталей для: {place_id}")
     r = requests.get(BASE_DETAILS, params=params, timeout=15)
     data = r.json()
     if data.get("status") != "OK":
@@ -558,7 +566,7 @@ def sheet_summary(wb, salons_data, regions):
 
 def run(api_key, regions, keywords, output_file, max_reviews=20, status_callback=None):
     print("=" * 60)
-    print("  Beauty Salon Scraper — Google Maps → Excel")
+    print("  Beauty Salon Scraper - Google Maps -> Excel")
     print("=" * 60)
 
     salons_data = []
@@ -567,7 +575,7 @@ def run(api_key, regions, keywords, output_file, max_reviews=20, status_callback
     for region in regions:
         for keyword in keywords:
             query = f"{keyword} {region}"
-            print(f"\n🔍 Поиск: {query}")
+            print(f"\n[Поиск]: {query}")
             places = search_places(query, api_key)
             print(f"   Найдено мест: {len(places)}")
 
@@ -577,12 +585,14 @@ def run(api_key, regions, keywords, output_file, max_reviews=20, status_callback
                     continue
                 seen_ids.add(pid)
 
-                print(f"   📍 {place.get('name')} — получаю детали…")
+                print(f"   [Место] {place.get('name')} - получаю детали...")
                 details = get_place_details(pid, api_key)
                 if not details:
+                    print(f"   [Пропуск] Детали не получены для {place.get('name')}")
                     continue
 
                 reviews   = details.get("reviews", [])[:max_reviews]
+                print(f"   [Данные] Получено отзывов: {len(reviews)}")
                 analysis  = analyze_reviews(reviews)
 
                 salons_data.append({
@@ -599,14 +609,17 @@ def run(api_key, regions, keywords, output_file, max_reviews=20, status_callback
                     "reviews":       reviews,
                     "analysis":      analysis,
                 })
+                print(f"   [Успех] Салон {place.get('name')} добавлен. Всего собрано: {len(salons_data)}")
+                if status_callback:
+                    status_callback(f"Собран: {place.get('name')} (Всего: {len(salons_data)})")
                 time.sleep(0.3)   # бережём квоту API
 
     if not salons_data:
-        print("\n⚠  Данные не получены. Проверьте API_KEY и регионы.")
+        print("\n[Внимание]  Данные не получены. Проверьте API_KEY и регионы.")
         return
 
-    print(f"\n✅  Собрано {len(salons_data)} уникальных салонов.")
-    print("📊 Создаю Excel отчёт…")
+    print(f"\n[Готово]  Собрано {len(salons_data)} уникальных салонов.")
+    print("[Отчет] Создаю Excel отчёт...")
 
     wb = openpyxl.Workbook()
     # Удалить дефолтный лист
@@ -621,7 +634,7 @@ def run(api_key, regions, keywords, output_file, max_reviews=20, status_callback
     sheet_loyal(wb, salons_data)
 
     wb.save(output_file)
-    print(f"\n🎉  Готово! Файл сохранён: {output_file}")
+    print(f"\n[Успех]  Готово! Файл сохранён: {output_file}")
     print("=" * 60)
 
 
