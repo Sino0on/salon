@@ -616,7 +616,7 @@ def run(api_key, regions, keywords, output_file, max_reviews=20, status_callback
 
     if not salons_data:
         print("\n[Внимание]  Данные не получены. Проверьте API_KEY и регионы.")
-        return
+        raise ValueError("По вашему запросу не найдено ни одного салона. Попробуйте изменить ключевые слова или регионы.")
 
     print(f"\n[Готово]  Собрано {len(salons_data)} уникальных салонов.")
     print("[Отчет] Создаю Excel отчёт...")
