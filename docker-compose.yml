@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # Монтируем директорию для отчетов, чтобы файлы сохранялись на хосте
+      - ./scraper_reports:/app/scraper_reports
+      # Монтируем БД, если нам нужно сохранять данные между перезапусками (пока БД пустая, но полезна)
+      - ./db.sqlite3:/app/db.sqlite3
+    environment:
+      - DEBUG=False
+      - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0
+    restart: unless-stopped

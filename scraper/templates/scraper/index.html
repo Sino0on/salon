@@ -1,0 +1,107 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Maps Парсер Отзывов</title>
+    <link rel="stylesheet" href="{% static 'scraper/style.css' %}">
+</head>
+<body>
+    <div class="container">
+        <div class="glass-card">
+            <div class="header">
+                <h1>Google Maps Scraper 🌸</h1>
+                <p>Собирайте отзывы и детальную аналитику в один клик</p>
+            </div>
+
+            <div id="form-container">
+                <form id="scraper-form">
+                    <div class="form-group">
+                        <label for="api_key">API Ключ (Google Maps)</label>
+                        <input type="text" id="api_key" name="api_key" class="form-control" value="AIzaSyAJPy_Abo-DZYgvZD9LEv4YA7KcNmBZybo" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="regions">Регионы (через запятую)</label>
+                        <textarea id="regions" name="regions" class="form-control" required>Бишкек, Кыргызстан, Ош, Кыргызстан</textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="keywords">Ключевые слова поиска (через запятую)</label>
+                        <textarea id="keywords" name="keywords" class="form-control" required>салон красоты, парикмахерская, nail studio, beauty salon</textarea>
+                    </div>
+
+                    <button type="submit" class="btn-submit">🚀 Начать сбор данных</button>
+                </form>
+            </div>
+
+            <div id="loading-overlay">
+                <div class="spinner"></div>
+                <h3>Выполняется сбор данных...</h3>
+                <p id="status-text">Инициализация...</p>
+            </div>
+
+            <div id="success-overlay">
+                <div class="icon-success">✨</div>
+                <h3>Готово!</h3>
+                <p>Данные успешно собраны и проанализированы.</p>
+                <a href="#" id="download-btn" class="btn-download">⬇️ Скачать Excel-отчет</a>
+                <br><br>
+                <a href="#" onclick="location.reload()" style="color: var(--text-muted); font-size: 14px; display: inline-block; margin-top: 15px; text-decoration: none;">Выполнить новый поиск</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('scraper-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            
+            document.getElementById('form-container').style.display = 'none';
+            document.getElementById('loading-overlay').style.display = 'block';
+
+            fetch('/api/start/', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.task_id) {
+                    checkStatus(data.task_id);
+                } else {
+                    alert('Ошибка: ' + data.error);
+                    location.reload();
+                }
+            })
+            .catch(error => {
+                alert('Ошибка сети');
+                location.reload();
+            });
+        });
+
+        function checkStatus(taskId) {
+            fetch(`/api/status/${taskId}/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'running' || data.status === 'pending') {
+                    document.getElementById('status-text').innerText = data.message || 'Сбор данных...';
+                    setTimeout(() => checkStatus(taskId), 2000);
+                } else if (data.status === 'completed') {
+                    document.getElementById('loading-overlay').style.display = 'none';
+                    document.getElementById('success-overlay').style.display = 'block';
+                    document.getElementById('download-btn').href = `/api/download/${taskId}/`;
+                } else if (data.status === 'error') {
+                    alert('Произошла ошибка: ' + data.message);
+                    location.reload();
+                }
+            })
+            .catch(error => {
+                console.error('Status check error:', error);
+                setTimeout(() => checkStatus(taskId), 3000);
+            });
+        }
+    </script>
+</body>
+</html>
