@@ -422,7 +422,7 @@ def sheet_activity(wb, salons_data):
     ws.sheet_view.showGridLines = False
 
     ws.merge_cells("A1:D1")
-    ws["A1"].value     = "📅  Активность отзывов по периодам"
+    ws["A1"].value     = "📅  Суммарная активность отзывов по всем салонам"
     ws["A1"].font      = Font(bold=True, size=14, color="FFFFFF", name="Arial")
     ws["A1"].fill      = PatternFill("solid", start_color=C_HEADER)
     ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
@@ -460,7 +460,7 @@ def sheet_loyal(wb, salons_data):
     ws = wb.create_sheet("🏆 Клиенты")
     ws.sheet_view.showGridLines = False
 
-    ws.merge_cells("A1:D1")
+    ws.merge_cells("A1:E1")
     ws["A1"].value     = "🏆  Авторы с несколькими отзывами (лояльные клиенты)"
     ws["A1"].font      = Font(bold=True, size=14, color="FFFFFF", name="Arial")
     ws["A1"].fill      = PatternFill("solid", start_color=C_HEADER)
@@ -468,12 +468,19 @@ def sheet_loyal(wb, salons_data):
     ws.row_dimensions[1].height = 28
 
     freq_all: Counter = Counter()
+    author_reviews = defaultdict(list)
     for sd in salons_data:
+        salon_name = sd.get("name", "—")
         freq_all += sd["analysis"]["reviewer_freq"]
+        for rv in sd.get("reviews", []):
+            author = rv.get("author_name", "Аноним")
+            text = rv.get("text", "").strip()
+            if text:
+                author_reviews[author].append({"salon": salon_name, "text": text})
 
-    for c, w in zip("ABCD", [35, 18, 20, 25]):
+    for c, w in zip("ABCDE", [35, 18, 20, 25, 75]):
         ws.column_dimensions[c].width = w
-    for col, label in enumerate(["Автор", "Кол-во отзывов", "Статус", "Примечание"], 1):
+    for col, label in enumerate(["Автор", "Кол-во отзывов", "Статус", "Примечание", "Оставленные отзывы"], 1):
         hdr(ws, 2, col, label, bg=C_SUBHEADER)
 
     row = 3
@@ -486,15 +493,27 @@ def sheet_loyal(wb, salons_data):
             status, bg = "🔁 Постоянный",  C_ACCENT
         else:
             status, bg = "✔️ Лояльный",    C_WHITE
+        
         note = f"Оставил(а) {cnt} отзыва — ценный голос"
+        
+        revs = author_reviews.get(author, [])
+        if revs:
+            reviews_text = "\n\n".join([f"📍 {r['salon']}:\n💬 \"{r['text']}\"" for r in revs])
+        else:
+            reviews_text = "Отзывы без текста (только рейтинг)"
+
         cell(ws, row, 1, author, bg=bg, bold=True)
         cell(ws, row, 2, cnt,    bg=bg, align="center")
         cell(ws, row, 3, status, bg=bg, align="center")
         cell(ws, row, 4, note,   bg=bg)
+        cell(ws, row, 5, reviews_text, bg=bg, wrap=True)
+        
+        # Увеличим высоту строки для удобного чтения отзывов
+        ws.row_dimensions[row].height = min(150, max(40, len(revs) * 35))
         row += 1
 
     if row == 3:
-        ws.merge_cells("A3:D3")
+        ws.merge_cells("A3:E3")
         ws["A3"].value = "Все авторы оставили по одному отзыву — нет повторных."
         ws["A3"].alignment = Alignment(horizontal="center")
     return ws
@@ -518,7 +537,9 @@ def sheet_summary(wb, salons_data, regions):
     all_ratings = [rv.get("rating", 0) for rv in all_reviews]
     avg_rating  = sum(all_ratings) / len(all_ratings) if all_ratings else 0
 
-    top5        = sorted(salons_data, key=lambda x: x.get("rating", 0), reverse=True)[:5]
+    valid_salons = [s for s in salons_data if s.get("total_ratings", 0) >= 5]
+    top20 = sorted(valid_salons, key=lambda x: (x.get("rating", 0), x.get("total_ratings", 0)), reverse=True)[:20]
+    
     service_all: Counter = Counter()
     for sd in salons_data:
         service_all += sd["analysis"]["service_counter"]
@@ -533,9 +554,9 @@ def sheet_summary(wb, salons_data, regions):
         ("🌍  Регионы охвата",                   ", ".join(regions)),
         ("📅  Дата парсинга",                    datetime.now().strftime("%d.%m.%Y %H:%M")),
         ("", ""),
-        ("🏆  ТОП-5 салонов по рейтингу", ""),
+        ("🏆  ТОП-20 салонов (мин. 5 отзывов)", ""),
     ]
-    for sd in top5:
+    for sd in top20:
         stats.append((f"   • {sd['name']}", f"{sd.get('rating','—')} ★ ({sd.get('total_ratings',0)} отзывов)"))
 
     for r, (k, v) in enumerate(stats, 2):
